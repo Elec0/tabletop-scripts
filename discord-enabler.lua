@@ -45,6 +45,9 @@ function updateDebugModeMenu()
     self.addContextMenuItem(menuText, toggleDebugMode)
 end
 
+-- Note there is a bug where if the button is clicked twice in quick succession,
+-- the cache will only fill a single card then stall. On the next click it works
+-- properly again.
 function getRandomCard(obj, player)
     -- Check if cache has cards
     if #cardCache > 0 then
