@@ -3,6 +3,11 @@ backURL='https://steamusercontent-a.akamaihd.net/ugc/1647720103762682461/35EF6E8
 cardCounter = 300
 debugMode = false
 
+-- Cache settings
+CACHE_SIZE = 2
+cardCache = {}
+cacheFilling = false
+
 -- Click the button to get a random card from Scryfall and spawn it
 function onLoad()
     -- Create a button on the object
@@ -20,6 +25,9 @@ function onLoad()
     -- Add context menu for debug mode
     self.addContextMenuItem("Toggle Debug Mode", toggleDebugMode)
     updateDebugModeMenu()
+    
+    -- Fill the cache
+    fillCache()
 end
 
 function toggleDebugMode()
@@ -37,7 +45,83 @@ function updateDebugModeMenu()
 end
 
 function getRandomCard(obj, player)
-    -- Get a random nonland card from Scryfall (English only)
+    -- Check if cache has cards
+    if #cardCache > 0 then
+        local cachedCard = table.remove(cardCache, 1)
+        debugPrint("Using cached card (" .. #cardCache .. " remaining in cache)")
+        
+        printToAll("Got card: " .. cachedCard.name, {r=0.2, g=1, b=0.2})
+        
+        -- Set the spawn position and rotation
+        local position = self.getPosition()
+        local rotation = self.getRotation()
+        cachedCard.cardDat.Transform.posX = position.x + 2
+        cachedCard.cardDat.Transform.posY = position.y + 2
+        cachedCard.cardDat.Transform.posZ = position.z
+        cachedCard.cardDat.Transform.rotX = rotation.x
+        cachedCard.cardDat.Transform.rotY = rotation.y
+        cachedCard.cardDat.Transform.rotZ = rotation.z
+
+        spawnObjectData({data = cachedCard.cardDat})
+        
+        -- Refill cache asynchronously
+        fillCache()
+    else
+        printToAll("Cache empty, fetching card...", {r=1, g=0.8, b=0.2})
+        fetchAndSpawnCard()
+    end
+end
+
+function fillCache()
+    if cacheFilling then
+        debugPrint("Cache already filling, skipping")
+        return
+    end
+    
+    local needed = CACHE_SIZE - #cardCache
+    if needed <= 0 then
+        debugPrint("Cache is full (" .. #cardCache .. "/" .. CACHE_SIZE .. ")")
+        return
+    end
+    
+    cacheFilling = true
+    debugPrint("Filling cache, need " .. needed .. " cards")
+    
+    Wait.time(function()
+        fetchCardForCache()
+    end, (i - 1) * 0.1, needed)  -- Stagger requests slightly
+end
+
+function fetchCardForCache()
+    local randomCardUrl = "https://api.scryfall.com/cards/random?q=lang:en&q=-t:land"
+    
+    cardCounter = cardCounter + 1
+    local currentCardNum = cardCounter
+    
+    debugPrint("Fetching card for cache (counter: " .. currentCardNum .. ")")
+    
+    WebRequest.get(randomCardUrl, function(req)
+        if req.is_error then
+            debugPrint("Error fetching card for cache: " .. req.error_message)
+            cacheFilling = false
+            return
+        end
+        
+        local c = JSONdecode(req.text)
+        local cardName = c.name
+        local cardDat = getCardDatFromJSON(c, currentCardNum)
+        
+        table.insert(cardCache, {name = cardName, cardDat = cardDat})
+        debugPrint("Added '" .. cardName .. "' to cache (" .. #cardCache .. "/" .. CACHE_SIZE .. ")")
+        
+        if #cardCache >= CACHE_SIZE then
+            cacheFilling = false
+            debugPrint("Cache full")
+        end
+    end)
+end
+
+function fetchAndSpawnCard()
     local randomCardUrl = "https://api.scryfall.com/cards/random?q=lang:en&q=-t:land"
     
     printToAll("Fetching random card from Scryfall...", {r=0.2, g=0.8, b=1})
@@ -45,7 +129,7 @@ function getRandomCard(obj, player)
     cardCounter = cardCounter + 1
     local currentCardNum = cardCounter
     
-    debugPrint("Request URL: " .. randomCardUrl)
+    debugPrint("Direct fetch (counter: " .. currentCardNum .. ")")
    
     WebRequest.get(randomCardUrl, function(req)
         if req.is_error then
@@ -73,6 +157,9 @@ function getRandomCard(obj, player)
         cardDat.Transform.rotZ = rotation.z
 
         spawnObjectData({data = cardDat})
+        
+        -- Try to refill cache
+        fillCache()
     end)
 end
 
