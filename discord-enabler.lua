@@ -1,6 +1,7 @@
 -- Random MTG Card Spawner for Tabletop Simulator
 backURL='https://steamusercontent-a.akamaihd.net/ugc/1647720103762682461/35EF6E87970E2A5D6581E7D96A99F8A575B7A15F/'
 cardCounter = 300
+debugMode = false
 
 -- Click the button to get a random card from Scryfall and spawn it
 function onLoad()
@@ -15,6 +16,24 @@ function onLoad()
         color={0.1,0.1,0.1,0.85},
         hover_color={0.1,0.1,0.1,0.9}
     })
+    
+    -- Add context menu for debug mode
+    self.addContextMenuItem("Toggle Debug Mode", toggleDebugMode)
+    updateDebugModeMenu()
+end
+
+function toggleDebugMode()
+    debugMode = not debugMode
+    updateDebugModeMenu()
+    
+    local status = debugMode and "enabled" or "disabled"
+    printToAll("Debug mode " .. status, {r=1, g=1, b=0.2})
+end
+
+function updateDebugModeMenu()
+    self.clearContextMenu()
+    local menuText = debugMode and "Debug Mode: ON" or "Debug Mode: OFF"
+    self.addContextMenuItem(menuText, toggleDebugMode)
 end
 
 function getRandomCard(obj, player)
@@ -26,6 +45,8 @@ function getRandomCard(obj, player)
     cardCounter = cardCounter + 1
     local currentCardNum = cardCounter
     
+    debugPrint("Request URL: " .. randomCardUrl)
+   
     WebRequest.get(randomCardUrl, function(req)
         if req.is_error then
             printToAll("Error fetching card: " .. req.error_message, {r=1, g=0.2, b=0.2})
@@ -33,6 +54,9 @@ function getRandomCard(obj, player)
         end
         local c = JSONdecode(req.text)
         local cardName = c.name
+
+        debugPrint("Received card: " .. cardName)
+        debugPrint("Card type: " .. (c.type_line or "unknown"))
 
         local cardDat = getCardDatFromJSON(c, currentCardNum)
 
@@ -150,6 +174,12 @@ function setOracle(c)local n='\n[b]'
     n=false
   end
   return c.oracle_text..(n and n..'[/b]'or'')
+end
+
+function debugPrint(txt)
+  if debugMode then
+    printToAll("[DEBUG] " .. txt, {r=1, g=1, b=0.2})
+  end
 end
 
 --------------------------------------------------------------------------------
