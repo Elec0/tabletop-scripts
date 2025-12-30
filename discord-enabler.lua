@@ -1,4 +1,5 @@
 -- Random MTG Card Spawner for Tabletop Simulator
+-- version 2
 backURL='https://steamusercontent-a.akamaihd.net/ugc/1647720103762682461/35EF6E87970E2A5D6581E7D96A99F8A575B7A15F/'
 cardCounter = 300
 debugMode = false
