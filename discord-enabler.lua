@@ -7,6 +7,7 @@ debugMode = false
 CACHE_SIZE = 2
 cardCache = {}
 cacheFilling = false
+pendingFetches = 0
 
 -- Click the button to get a random card from Scryfall and spawn it
 function onLoad()
@@ -67,7 +68,6 @@ function getRandomCard(obj, player)
         -- Refill cache asynchronously
         fillCache()
     else
-        printToAll("Cache empty, fetching card...", {r=1, g=0.8, b=0.2})
         fetchAndSpawnCard()
     end
 end
@@ -85,11 +85,10 @@ function fillCache()
     end
     
     cacheFilling = true
+    pendingFetches = needed
     debugPrint("Filling cache, need " .. needed .. " cards")
     
-    Wait.time(function()
-        fetchCardForCache()
-    end, (i - 1) * 0.1, needed)  -- Stagger requests slightly
+    Wait.time(fetchCardForCache, 0.1, needed)
 end
 
 function fetchCardForCache()
@@ -103,7 +102,10 @@ function fetchCardForCache()
     WebRequest.get(randomCardUrl, function(req)
         if req.is_error then
             debugPrint("Error fetching card for cache: " .. req.error_message)
-            cacheFilling = false
+            pendingFetches = pendingFetches - 1
+            if pendingFetches <= 0 then
+                cacheFilling = false
+            end
             return
         end
         
@@ -114,9 +116,10 @@ function fetchCardForCache()
         table.insert(cardCache, {name = cardName, cardDat = cardDat})
         debugPrint("Added '" .. cardName .. "' to cache (" .. #cardCache .. "/" .. CACHE_SIZE .. ")")
         
-        if #cardCache >= CACHE_SIZE then
+        pendingFetches = pendingFetches - 1
+        if pendingFetches <= 0 then
             cacheFilling = false
-            debugPrint("Cache full")
+            debugPrint("Cache filling complete")
         end
     end)
 end
@@ -162,7 +165,6 @@ function fetchAndSpawnCard()
         fillCache()
     end)
 end
-
 
 
 -- Copied this from 'Mystery Booster Generator' by pie
