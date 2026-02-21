@@ -1,14 +1,41 @@
 -- Random MTG Card Spawner for Tabletop Simulator
--- version 2
+-- version 3.0
 backURL='https://steamusercontent-a.akamaihd.net/ugc/1647720103762682461/35EF6E87970E2A5D6581E7D96A99F8A575B7A15F/'
+randomCardUrl = "https://api.scryfall.com/cards/random?q=lang:en&q=-t:land"
 cardCounter = 300
-debugMode = false
+debugMode = true
 
 -- Cache settings
 CACHE_SIZE = 2
 cardCache = {}
 cacheFilling = false
 pendingFetches = 0
+
+-- API throttling
+lastRequestTime = 0
+MIN_REQUEST_INTERVAL = 0.05  -- 50 milliseconds
+
+headers = {
+    ["User-Agent"] = "TabletopSimulator-DiscordEnabler/3.0",
+    ["Accept"] = "application/json;q=0.9,*/*;q=0.8"
+}
+
+function throttledWebRequest(url, callback)
+    local timeSinceLastRequest = os.time() - lastRequestTime
+    local delay = math.max(0, MIN_REQUEST_INTERVAL - timeSinceLastRequest)
+    
+    local function makeRequest()
+        WebRequest.custom(url, "GET", true, nil, headers, callback)
+        lastRequestTime = os.time()
+    end
+    
+    if delay > 0 then
+        debugPrint("Throttling request: waiting " .. string.format("%.3f", delay) .. " seconds")
+        Wait.time(makeRequest, delay)
+    else
+        makeRequest()
+    end
+end
 
 -- Click the button to get a random card from Scryfall and spawn it
 function onLoad()
@@ -92,18 +119,16 @@ function fillCache()
     pendingFetches = needed
     debugPrint("Filling cache, need " .. needed .. " cards")
     
-    Wait.time(fetchCardForCache, 0.1, needed)
+    Wait.time(fetchCardForCache, MIN_REQUEST_INTERVAL, needed)
 end
 
-function fetchCardForCache()
-    local randomCardUrl = "https://api.scryfall.com/cards/random?q=lang:en&q=-t:land"
-    
+function fetchCardForCache()    
     cardCounter = cardCounter + 1
     local currentCardNum = cardCounter
     
     debugPrint("Fetching card for cache (counter: " .. currentCardNum .. ")")
     
-    WebRequest.get(randomCardUrl, function(req)
+    throttledWebRequest(randomCardUrl, function(req)
         if req.is_error then
             debugPrint("Error fetching card for cache: " .. req.error_message)
             pendingFetches = pendingFetches - 1
@@ -138,7 +163,7 @@ function fetchAndSpawnCard()
     
     debugPrint("Direct fetch (counter: " .. currentCardNum .. ")")
    
-    WebRequest.get(randomCardUrl, function(req)
+    throttledWebRequest(randomCardUrl, function(req)
         if req.is_error then
             printToAll("Error fetching card: " .. req.error_message, {r=1, g=0.2, b=0.2})
             return
@@ -271,7 +296,7 @@ end
 
 function debugPrint(txt)
   if debugMode then
-    printToAll("[DEBUG] " .. txt, {r=1, g=1, b=0.2})
+    printToAll("[DEBUG] " .. (txt or "nil"), {r=1, g=1, b=0.2})
   end
 end
 
@@ -353,11 +378,16 @@ card_face_keys={        -- "card_faces":[{"object":"card_face",
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 function JSONdecode(txt)
-  local txtBeginning = txt:sub(1,16)
-  local jsonType = txtBeginning:match('{"object":"(%w+)"')
+  local jsonType = txt:match('{\n?%s*"object":%s*"(%w+)"')
 
   -- not scryfall? use normal JSON.decode
-  if not(jsonType=='card' or jsonType=='list') then
+  if not(jsonType == 'card' or jsonType == 'list') then
+    if jsonType == "error" then
+      local errMsg = txt:match('.*"details"%s*:%s*"([^"]*)"')
+      error("Scryfall API error: " .. (errMsg or "unknown error"))
+    else
+      debugPrint("Unknown JSON type: " .. (jsonType or "~nil"))
+    end
     return JSON.decode(txt)
   end
 
