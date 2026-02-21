@@ -3,7 +3,7 @@
 backURL='https://steamusercontent-a.akamaihd.net/ugc/1647720103762682461/35EF6E87970E2A5D6581E7D96A99F8A575B7A15F/'
 randomCardUrl = "https://api.scryfall.com/cards/random?q=lang:en&q=-t:land"
 cardCounter = 300
-debugMode = true
+debugMode = false
 
 -- Cache settings
 CACHE_SIZE = 2
